@@ -1,12 +1,18 @@
-import { useLayoutEffect, useContext } from "react";
+import { useLayoutEffect, useContext, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ExpensesContext } from "../store/expenses-context";
 import IconButton from "../components/UI/IconButton";
 import ExpenseForm from "../components/ManageExpense/ExpenseForm";
 import { GlobalStyles } from "../constants/styles";
+import { storeExpense, updateExpense, deleteExpense } from "../utils/http";
+import LoadingOverlay from "../components/UI/LoadingOverlay";
+import ErrorOverlay from "../components/UI/ErrorOverlay";
 
 const ManageExpenses = ({ route, navigation }) => {
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [error, setError] = useState();
+
   const expensesContext = useContext(ExpensesContext);
 
   const editedExpenseId = route.params?.expenseId;
@@ -22,22 +28,45 @@ const ManageExpenses = ({ route, navigation }) => {
     });
   }, [navigation, isEditing]);
 
-  function deleteExpenseHandler() {
-    expensesContext.deleteExpense(editedExpenseId);
-    navigation.goBack();
+  async function deleteExpenseHandler() {
+    setIsUpdating(true);
+    try {
+      await deleteExpense(editedExpenseId);
+      expensesContext.deleteExpense(editedExpenseId);
+      navigation.goBack();
+    } catch (error) {
+      setError("Failed to delete expense. Please try again later.");
+      setIsUpdating(false);
+    }
   }
 
   function cancelHandler() {
     navigation.goBack();
   }
 
-  function confirmHandler(expenseData) {
-    if (isEditing) {
-      expensesContext.updateExpense(editedExpenseId, expenseData);
-    } else {
-      expensesContext.addExpense(expenseData);
+  async function confirmHandler(expenseData) {
+    setIsUpdating(true);
+    try {
+      if (isEditing) {
+        expensesContext.updateExpense(editedExpenseId, expenseData);
+        await updateExpense(editedExpenseId, expenseData);
+      } else {
+        const id = await storeExpense(expenseData);
+        expensesContext.addExpense({ ...expenseData, id: id });
+      }
+      navigation.goBack();
+    } catch (error) {
+      setError("Failed to save expense. Please try again later.");
+      setIsUpdating(false);
     }
-    navigation.goBack();
+  }
+
+  if (error && !isUpdating) {
+    return <ErrorOverlay message={error} />;
+  }
+
+  if (isUpdating) {
+    return <LoadingOverlay />;
   }
 
   return (
